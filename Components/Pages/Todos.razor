@@ -1,0 +1,395 @@
+@page "/todos"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using TodoApp.Models
+@using TodoApp.Services
+@inject ITodoService TodoService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>My Todos</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2>My Todos</h2>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" @onclick="ShowCreateForm">
+                <span class="bi bi-plus-lg"></span> New Todo
+            </button>
+        </div>
+    </div>
+
+    @if (_stats is not null)
+    {
+        <div class="row mb-4 g-3">
+            <div class="col-6 col-md-2">
+                <div class="card text-center border-0 bg-light">
+                    <div class="card-body py-2">
+                        <div class="fs-4 fw-bold">@_stats.Total</div>
+                        <small class="text-muted">Total</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card text-center border-0 bg-warning bg-opacity-10">
+                    <div class="card-body py-2">
+                        <div class="fs-4 fw-bold text-warning">@_stats.Pending</div>
+                        <small class="text-muted">Pending</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card text-center border-0 bg-info bg-opacity-10">
+                    <div class="card-body py-2">
+                        <div class="fs-4 fw-bold text-info">@_stats.InProgress</div>
+                        <small class="text-muted">In Progress</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card text-center border-0 bg-success bg-opacity-10">
+                    <div class="card-body py-2">
+                        <div class="fs-4 fw-bold text-success">@_stats.Completed</div>
+                        <small class="text-muted">Completed</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card text-center border-0 bg-danger bg-opacity-10">
+                    <div class="card-body py-2">
+                        <div class="fs-4 fw-bold text-danger">@_stats.Overdue</div>
+                        <small class="text-muted">Overdue</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card text-center border-0 bg-primary bg-opacity-10">
+                    <div class="card-body py-2">
+                        <div class="fs-4 fw-bold text-primary">@_stats.DueToday</div>
+                        <small class="text-muted">Due Today</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Filters -->
+    <div class="row mb-3 g-2">
+        <div class="col-md-3">
+            <input type="text" class="form-control" placeholder="Search..." 
+                   @bind="_filter.SearchTerm" @bind:event="oninput" @bind:after="LoadTodosAsync" />
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" @bind="_selectedStatus" @bind:after="OnFilterChanged">
+                <option value="">All Status</option>
+                @foreach (var s in Enum.GetValues<TodoStatus>())
+                {
+                    <option value="@s">@FormatEnum(s)</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" @bind="_selectedPriority" @bind:after="OnFilterChanged">
+                <option value="">All Priority</option>
+                @foreach (var p in Enum.GetValues<TodoPriority>())
+                {
+                    <option value="@p">@p</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" @bind="_selectedCategory" @bind:after="OnFilterChanged">
+                <option value="">All Categories</option>
+                @foreach (var c in _categories)
+                {
+                    <option value="@c.Id">@c.Name</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" @bind="_filter.SortBy" @bind:after="LoadTodosAsync">
+                <option value="DueDate">Sort by Due Date</option>
+                <option value="Priority">Sort by Priority</option>
+                <option value="CreatedAt">Sort by Created</option>
+                <option value="Title">Sort by Title</option>
+            </select>
+        </div>
+        <div class="col-md-1">
+            <button class="btn btn-outline-secondary w-100" @onclick="ToggleSortDirection" 
+                    title="@(_filter.SortDescending ? "Descending" : "Ascending")">
+                @(_filter.SortDescending ? "\u2193" : "\u2191")
+            </button>
+        </div>
+    </div>
+
+    <!-- Todo List -->
+    @if (_loading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (!_todos.Any())
+    {
+        <div class="text-center py-5 text-muted">
+            <p class="fs-5">No todos found</p>
+            <button class="btn btn-primary" @onclick="ShowCreateForm">Create your first todo</button>
+        </div>
+    }
+    else
+    {
+        <div class="list-group">
+            @foreach (var todo in _todos)
+            {
+                <div class="list-group-item list-group-item-action d-flex align-items-start gap-3 @(todo.Status == TodoStatus.Completed ? "opacity-50" : "")">
+                    <div class="pt-1">
+                        <input type="checkbox" class="form-check-input" 
+                               checked="@(todo.Status == TodoStatus.Completed)"
+                               @onchange="() => ToggleComplete(todo)" />
+                    </div>
+                    <div class="flex-grow-1" @onclick="() => ShowEditForm(todo)" style="cursor:pointer;">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="fw-semibold @(todo.Status == TodoStatus.Completed ? "text-decoration-line-through" : "")">
+                                @todo.Title
+                            </span>
+                            <span class="badge @GetPriorityBadgeClass(todo.Priority)">@todo.Priority</span>
+                            <span class="badge @GetStatusBadgeClass(todo.Status)">@FormatEnum(todo.Status)</span>
+                            @if (todo.Category is not null)
+                            {
+                                <span class="badge" style="background-color: @todo.Category.Color; color: white;">
+                                    @todo.Category.Name
+                                </span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(todo.Description))
+                        {
+                            <small class="text-muted d-block mb-1">@Truncate(todo.Description, 120)</small>
+                        }
+                        <small class="text-muted">
+                            @if (todo.DueDate.HasValue)
+                            {
+                                <span class="@(IsOverdue(todo) ? "text-danger fw-bold" : "")">
+                                    Due @todo.DueDate.Value.ToString("MMM dd, yyyy")
+                                </span>
+                                <span class="mx-1">·</span>
+                            }
+                            Created @todo.CreatedAt.ToString("MMM dd")
+                        </small>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteTodo(todo.Id)" 
+                            title="Delete">
+                        &times;
+                    </button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Create/Edit Modal -->
+@if (_showForm)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_editingTodo.Id == 0 ? "New Todo" : "Edit Todo")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                </div>
+                <EditForm Model="_editingTodo" OnValidSubmit="SaveTodo" FormName="todoForm">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Title</label>
+                            <InputText class="form-control" @bind-Value="_editingTodo.Title" />
+                            <ValidationMessage For="() => _editingTodo.Title" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <InputTextArea class="form-control" rows="3" @bind-Value="_editingTodo.Description" />
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Priority</label>
+                                <InputSelect class="form-select" @bind-Value="_editingTodo.Priority">
+                                    @foreach (var p in Enum.GetValues<TodoPriority>())
+                                    {
+                                        <option value="@p">@p</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Status</label>
+                                <InputSelect class="form-select" @bind-Value="_editingTodo.Status">
+                                    @foreach (var s in Enum.GetValues<TodoStatus>())
+                                    {
+                                        <option value="@s">@FormatEnum(s)</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Due Date</label>
+                                <InputDate class="form-control" @bind-Value="_editingTodo.DueDate" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Category</label>
+                                <InputSelect class="form-select" @bind-Value="_editingTodo.CategoryId">
+                                    <option value="">None</option>
+                                    @foreach (var c in _categories)
+                                    {
+                                        <option value="@c.Id">@c.Name</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<TodoItem> _todos = [];
+    private List<TodoCategory> _categories = [];
+    private TodoStats? _stats;
+    private TodoFilter _filter = new();
+    private TodoItem _editingTodo = new();
+    private bool _showForm;
+    private bool _loading = true;
+    private string _userId = string.Empty;
+
+    private string _selectedStatus = string.Empty;
+    private string _selectedPriority = string.Empty;
+    private string _selectedCategory = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+
+        if (string.IsNullOrEmpty(_userId)) return;
+
+        await LoadTodosAsync();
+        await LoadCategoriesAsync();
+    }
+
+    private async Task LoadTodosAsync()
+    {
+        _loading = true;
+        _todos = await TodoService.GetTodosAsync(_userId, _filter);
+        _stats = await TodoService.GetStatsAsync(_userId);
+        _loading = false;
+    }
+
+    private async Task LoadCategoriesAsync()
+    {
+        _categories = await TodoService.GetCategoriesAsync(_userId);
+    }
+
+    private void OnFilterChanged()
+    {
+        _filter.Status = Enum.TryParse<TodoStatus>(_selectedStatus, out var s) ? s : null;
+        _filter.Priority = Enum.TryParse<TodoPriority>(_selectedPriority, out var p) ? p : null;
+        _filter.CategoryId = int.TryParse(_selectedCategory, out var c) ? c : null;
+        _ = LoadTodosAsync();
+    }
+
+    private async Task ToggleSortDirection()
+    {
+        _filter.SortDescending = !_filter.SortDescending;
+        await LoadTodosAsync();
+    }
+
+    private void ShowCreateForm()
+    {
+        _editingTodo = new TodoItem { UserId = _userId };
+        _showForm = true;
+    }
+
+    private void ShowEditForm(TodoItem todo)
+    {
+        _editingTodo = new TodoItem
+        {
+            Id = todo.Id,
+            Title = todo.Title,
+            Description = todo.Description,
+            Priority = todo.Priority,
+            Status = todo.Status,
+            DueDate = todo.DueDate,
+            CategoryId = todo.CategoryId,
+            UserId = _userId
+        };
+        _showForm = true;
+    }
+
+    private void CloseForm() => _showForm = false;
+
+    private async Task SaveTodo()
+    {
+        _editingTodo.UserId = _userId;
+
+        if (_editingTodo.Id == 0)
+            await TodoService.CreateTodoAsync(_editingTodo);
+        else
+            await TodoService.UpdateTodoAsync(_editingTodo);
+
+        _showForm = false;
+        await LoadTodosAsync();
+    }
+
+    private async Task ToggleComplete(TodoItem todo)
+    {
+        todo.Status = todo.Status == TodoStatus.Completed ? TodoStatus.Pending : TodoStatus.Completed;
+        todo.UserId = _userId;
+        await TodoService.UpdateTodoAsync(todo);
+        await LoadTodosAsync();
+    }
+
+    private async Task DeleteTodo(int id)
+    {
+        await TodoService.DeleteTodoAsync(id, _userId);
+        await LoadTodosAsync();
+    }
+
+    private static bool IsOverdue(TodoItem todo) =>
+        todo.DueDate < DateTime.UtcNow && todo.Status != TodoStatus.Completed;
+
+    private static string Truncate(string text, int maxLength) =>
+        text.Length <= maxLength ? text : text[..maxLength] + "...";
+
+    private static string FormatEnum(TodoStatus status) => status switch
+    {
+        TodoStatus.InProgress => "In Progress",
+        _ => status.ToString()
+    };
+
+    private static string GetPriorityBadgeClass(TodoPriority priority) => priority switch
+    {
+        TodoPriority.Urgent => "bg-danger",
+        TodoPriority.High => "bg-warning text-dark",
+        TodoPriority.Medium => "bg-info text-dark",
+        TodoPriority.Low => "bg-secondary",
+        _ => "bg-secondary"
+    };
+
+    private static string GetStatusBadgeClass(TodoStatus status) => status switch
+    {
+        TodoStatus.Completed => "bg-success",
+        TodoStatus.InProgress => "bg-primary",
+        TodoStatus.Pending => "bg-secondary",
+        _ => "bg-secondary"
+    };
+
+}

@@ -1,0 +1,89 @@
+@page "/{{name}}s"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using TodoApp.Models
+@using TodoApp.Services
+@inject I{{Name}}Service {{Name}}Service
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>{{Name}}s</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2>{{Name}}s</h2>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" @onclick="ShowCreateForm">New {{Name}}</button>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (!_items.Any())
+    {
+        <div class="text-center py-5 text-muted">
+            <p class="fs-5">No {{name}}s found</p>
+            <button class="btn btn-primary" @onclick="ShowCreateForm">Create your first {{name}}</button>
+        </div>
+    }
+    else
+    {
+        <!-- TODO: Render list of items -->
+    }
+</div>
+
+<!-- TODO: Add create/edit modal -->
+
+@code {
+    private List<{{Name}}> _items = [];
+    private bool _loading = true;
+    private bool _showForm;
+    private {{Name}} _editing = new();
+    private string _userId = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+        if (string.IsNullOrEmpty(_userId)) return;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _items = await {{Name}}Service.GetAllAsync(_userId);
+        _loading = false;
+    }
+
+    private void ShowCreateForm()
+    {
+        _editing = new {{Name}} { UserId = _userId };
+        _showForm = true;
+    }
+
+    private async Task Save()
+    {
+        _editing.UserId = _userId;
+        if (_editing.Id == 0)
+            await {{Name}}Service.CreateAsync(_editing);
+        else
+            await {{Name}}Service.UpdateAsync(_editing);
+        _showForm = false;
+        await LoadAsync();
+    }
+
+    private async Task Delete(int id)
+    {
+        await {{Name}}Service.DeleteAsync(id, _userId);
+        await LoadAsync();
+    }
+}

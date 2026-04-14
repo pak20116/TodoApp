@@ -1,0 +1,183 @@
+﻿@page "/"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using TodoApp.Models
+@using TodoApp.Services
+@inject ITodoService TodoService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Dashboard - TodoApp</PageTitle>
+
+<div class="container-fluid">
+    <h2 class="mb-4">Dashboard</h2>
+
+    @if (_stats is not null)
+    {
+        <div class="row g-4 mb-4">
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Total Tasks</h6>
+                                <h3 class="mb-0">@_stats.Total</h3>
+                            </div>
+                            <div class="bg-primary bg-opacity-10 rounded-circle p-3">
+                                <span class="text-primary fs-4">&#9776;</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">In Progress</h6>
+                                <h3 class="mb-0">@_stats.InProgress</h3>
+                            </div>
+                            <div class="bg-info bg-opacity-10 rounded-circle p-3">
+                                <span class="text-info fs-4">&#9654;</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Completed</h6>
+                                <h3 class="mb-0">@_stats.Completed</h3>
+                            </div>
+                            <div class="bg-success bg-opacity-10 rounded-circle p-3">
+                                <span class="text-success fs-4">&#10003;</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Overdue</h6>
+                                <h3 class="mb-0 @(_stats.Overdue > 0 ? "text-danger" : "")">@_stats.Overdue</h3>
+                            </div>
+                            <div class="bg-danger bg-opacity-10 rounded-circle p-3">
+                                <span class="text-danger fs-4">&#9888;</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (_stats.Total > 0)
+        {
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body">
+                            <h6 class="mb-3">Progress</h6>
+                            <div class="progress" style="height: 24px;">
+                                @{ var pct = _stats.Total > 0 ? (int)((double)_stats.Completed / _stats.Total * 100) : 0; }
+                                <div class="progress-bar bg-success" role="progressbar" 
+                                     style="width: @(pct)%">@pct%</div>
+                            </div>
+                            <small class="text-muted mt-2 d-block">
+                                @_stats.Completed of @_stats.Total tasks completed
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body">
+                            <h6 class="mb-3">Quick Actions</h6>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <a href="/todos" class="btn btn-primary">View All Todos</a>
+                                <a href="/categories" class="btn btn-outline-secondary">Manage Categories</a>
+                            </div>
+                            @if (_stats.DueToday > 0)
+                            {
+                                <div class="alert alert-warning mt-3 mb-0 py-2">
+                                    <strong>@_stats.DueToday</strong> task(s) due today!
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+
+    @if (_recentTodos.Any())
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Recent Todos</h6>
+                <a href="/todos" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <ul class="list-group list-group-flush">
+                @foreach (var todo in _recentTodos)
+                {
+                    <li class="list-group-item d-flex align-items-center gap-2">
+                        <span class="badge @GetPriorityBadgeClass(todo.Priority)">&nbsp;</span>
+                        <span class="@(todo.Status == TodoStatus.Completed ? "text-decoration-line-through text-muted" : "")">
+                            @todo.Title
+                        </span>
+                        <span class="ms-auto">
+                            @if (todo.DueDate.HasValue)
+                            {
+                                <small class="@(todo.DueDate < DateTime.UtcNow && todo.Status != TodoStatus.Completed ? "text-danger" : "text-muted")">
+                                    @todo.DueDate.Value.ToString("MMM dd")
+                                </small>
+                            }
+                        </span>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+    else if (_stats is not null && _stats.Total == 0)
+    {
+        <div class="text-center py-5">
+            <h4 class="text-muted">Welcome to TodoApp!</h4>
+            <p class="text-muted">Get started by creating your first todo.</p>
+            <a href="/todos" class="btn btn-primary btn-lg">Get Started</a>
+        </div>
+    }
+</div>
+
+@code {
+    private TodoStats? _stats;
+    private List<TodoItem> _recentTodos = [];
+    private string _userId = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+
+        if (string.IsNullOrEmpty(_userId)) return;
+
+        _stats = await TodoService.GetStatsAsync(_userId);
+        var allTodos = await TodoService.GetTodosAsync(_userId, new TodoFilter { SortBy = "CreatedAt", SortDescending = true });
+        _recentTodos = allTodos.Take(5).ToList();
+    }
+
+    private static string GetPriorityBadgeClass(TodoPriority priority) => priority switch
+    {
+        TodoPriority.Urgent => "bg-danger",
+        TodoPriority.High => "bg-warning",
+        TodoPriority.Medium => "bg-info",
+        TodoPriority.Low => "bg-secondary",
+        _ => "bg-secondary"
+    };
+}

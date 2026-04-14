@@ -1,0 +1,53 @@
+using Microsoft.EntityFrameworkCore;
+using TodoApp.Data;
+using TodoApp.Models;
+
+namespace TodoApp.Services;
+
+public class {{Name}}Service(ApplicationDbContext db) : I{{Name}}Service
+{
+    public async Task<List<{{Name}}>> GetAllAsync(string userId)
+    {
+        return await db.{{Name}}s
+            .Where(x => x.UserId == userId)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<{{Name}}?> GetByIdAsync(int id, string userId)
+    {
+        return await db.{{Name}}s
+            .FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
+    }
+
+    public async Task<{{Name}}> CreateAsync({{Name}} item)
+    {
+        item.CreatedAt = DateTime.UtcNow;
+        db.{{Name}}s.Add(item);
+        await db.SaveChangesAsync();
+        return item;
+    }
+
+    public async Task<{{Name}}> UpdateAsync({{Name}} item)
+    {
+        var existing = await db.{{Name}}s
+            .FirstOrDefaultAsync(x => x.Id == item.Id && x.UserId == item.UserId)
+            ?? throw new InvalidOperationException("{{Name}} not found.");
+
+        // TODO: Map updated properties from item to existing
+
+        await db.SaveChangesAsync();
+        return existing;
+    }
+
+    public async Task DeleteAsync(int id, string userId)
+    {
+        var item = await db.{{Name}}s
+            .FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
+        if (item is not null)
+        {
+            db.{{Name}}s.Remove(item);
+            await db.SaveChangesAsync();
+        }
+    }
+}

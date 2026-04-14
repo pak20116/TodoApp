@@ -1,0 +1,12 @@
+using TodoApp.Models;
+
+namespace TodoApp.Services;
+
+public interface I{{Name}}Service
+{
+    Task<List<{{Name}}>> GetAllAsync(string userId);
+    Task<{{Name}}?> GetByIdAsync(int id, string userId);
+    Task<{{Name}}> CreateAsync({{Name}} item);
+    Task<{{Name}}> UpdateAsync({{Name}} item);
+    Task DeleteAsync(int id, string userId);
+}

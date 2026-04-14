@@ -1,0 +1,141 @@
+@page "/categories"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using TodoApp.Models
+@using TodoApp.Services
+@inject ITodoService TodoService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Categories</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2>Categories</h2>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="input-group">
+                <input type="text" class="form-control" placeholder="New category name..." 
+                       @bind="_newCategoryName" @bind:event="oninput" />
+                <input type="color" class="form-control form-control-color" 
+                       @bind="_newCategoryColor" title="Pick color" />
+                <button class="btn btn-primary" @onclick="CreateCategory" 
+                        disabled="@string.IsNullOrWhiteSpace(_newCategoryName)">Add</button>
+            </div>
+        </div>
+    </div>
+
+    @if (!_categories.Any())
+    {
+        <p class="text-muted">No categories yet. Create one above to organize your todos.</p>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var category in _categories)
+            {
+                <div class="col-md-4 col-lg-3">
+                    <div class="card">
+                        <div class="card-body d-flex align-items-center gap-2">
+                            <span class="rounded-circle d-inline-block" 
+                                  style="width: 16px; height: 16px; background: @category.Color;"></span>
+                            @if (_editingId == category.Id)
+                            {
+                                <input type="text" class="form-control form-control-sm flex-grow-1" 
+                                       @bind="_editName" />
+                                <input type="color" class="form-control form-control-color form-control-sm" 
+                                       @bind="_editColor" style="width: 32px; padding: 2px;" />
+                                <button class="btn btn-sm btn-success" @onclick="() => UpdateCategory(category)">
+                                    &#10003;
+                                </button>
+                                <button class="btn btn-sm btn-secondary" @onclick="CancelEdit">
+                                    &#10005;
+                                </button>
+                            }
+                            else
+                            {
+                                <span class="flex-grow-1 fw-medium">@category.Name</span>
+                                <small class="text-muted">@category.Todos.Count todos</small>
+                                <button class="btn btn-sm btn-outline-secondary" 
+                                        @onclick="() => StartEdit(category)" title="Edit">
+                                    &#9998;
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" 
+                                        @onclick="() => DeleteCategory(category.Id)" title="Delete">
+                                    &times;
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<TodoCategory> _categories = [];
+    private string _userId = string.Empty;
+    private string _newCategoryName = string.Empty;
+    private string _newCategoryColor = "#3b82f6";
+    private int? _editingId;
+    private string _editName = string.Empty;
+    private string _editColor = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+        await LoadCategories();
+    }
+
+    private async Task LoadCategories()
+    {
+        _categories = await TodoService.GetCategoriesAsync(_userId);
+    }
+
+    private async Task CreateCategory()
+    {
+        if (string.IsNullOrWhiteSpace(_newCategoryName)) return;
+
+        await TodoService.CreateCategoryAsync(new TodoCategory
+        {
+            Name = _newCategoryName.Trim(),
+            Color = _newCategoryColor,
+            UserId = _userId
+        });
+
+        _newCategoryName = string.Empty;
+        _newCategoryColor = "#3b82f6";
+        await LoadCategories();
+    }
+
+    private void StartEdit(TodoCategory category)
+    {
+        _editingId = category.Id;
+        _editName = category.Name;
+        _editColor = category.Color;
+    }
+
+    private void CancelEdit() => _editingId = null;
+
+    private async Task UpdateCategory(TodoCategory category)
+    {
+        category.Name = _editName.Trim();
+        category.Color = _editColor;
+        category.UserId = _userId;
+        await TodoService.UpdateCategoryAsync(category);
+        _editingId = null;
+        await LoadCategories();
+    }
+
+    private async Task DeleteCategory(int id)
+    {
+        await TodoService.DeleteCategoryAsync(id, _userId);
+        await LoadCategories();
+    }
+}
