@@ -1,0 +1,266 @@
+@page "/sports"
+@rendermode InteractiveServer
+@using TodoApp.Models
+@using TodoApp.Services
+@inject ISportsService SportsService
+
+<PageTitle>Sports Statistics</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2>Sports Statistics</h2>
+            <p class="text-muted mb-0">Select a sport then search for a player.</p>
+        </div>
+    </div>
+
+    <div class="row mb-4 g-3 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label fw-semibold">Sport</label>
+            <select class="form-select" @bind="_selectedSportId" @bind:after="OnSportChanged">
+                <option value="">-- Select Sport --</option>
+                @foreach (var sport in _sports)
+                {
+                    <option value="@sport.Id">@sport.DisplayName</option>
+                }
+            </select>
+        </div>
+
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">
+                Player
+                @if (_players.Count > 0)
+                {
+                    <small class="text-muted fw-normal ms-1">(@_players.Count available)</small>
+                }
+            </label>
+            <div class="position-relative">
+                <input type="text"
+                       class="form-control @(_selectedPlayer is not null ? "border-primary" : "")"
+                       placeholder="@GetPlayerPlaceholder()"
+                       value="@_playerSearch"
+                       @oninput="OnPlayerSearchInput"
+                       @onkeydown="OnPlayerSearchKeyDown"
+                       @onfocus="OnPlayerSearchFocus"
+                       @onblur="OnPlayerSearchBlur"
+                       disabled="@(_players.Count == 0 || _loadingPlayers)"
+                       autocomplete="off" />
+
+                @if (_loadingPlayers)
+                {
+                    <span class="position-absolute top-50 end-0 translate-middle-y me-3">
+                        <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                    </span>
+                }
+                else if (_selectedPlayer is not null)
+                {
+                    <button class="btn btn-sm position-absolute top-50 end-0 translate-middle-y me-1 border-0 text-muted"
+                            style="background:none;" @onmousedown="ClearPlayer">&#x2715;</button>
+                }
+
+                @if (_showDropdown && _filteredPlayers.Count > 0)
+                {
+                    <div class="border rounded shadow-sm bg-white position-absolute w-100"
+                         style="top: 100%; z-index: 1050; max-height: 280px; overflow-y: auto;">
+                        @for (int i = 0; i < _filteredPlayers.Count; i++)
+                        {
+                            var player = _filteredPlayers[i];
+                            var idx = i;
+                            <button type="button"
+                                    class="d-flex w-100 align-items-center gap-2 px-3 py-2 border-0 text-start @(idx == _highlightedIndex ? "bg-primary text-white" : "bg-white")"
+                                    style="cursor: pointer;"
+                                    @onmousedown="() => SelectPlayer(player)"
+                                    @onmouseover="() => _highlightedIndex = idx">
+                                <span class="fw-semibold flex-grow-1">@player.FullName</span>
+                                @if (player.Team is not null)
+                                {
+                                    <small class="@(idx == _highlightedIndex ? "text-white-50" : "text-muted")">@player.Team</small>
+                                }
+                                @if (player.Position is not null)
+                                {
+                                    <span class="badge @(idx == _highlightedIndex ? "bg-white text-primary" : "bg-light text-secondary")">@player.Position</span>
+                                }
+                            </button>
+                        }
+                    </div>
+                }
+
+                @if (_showDropdown && _players.Count > 0 && _filteredPlayers.Count == 0 && !string.IsNullOrEmpty(_playerSearch))
+                {
+                    <div class="border rounded shadow-sm bg-white position-absolute w-100 px-3 py-2 text-muted"
+                         style="top: 100%; z-index: 1050;">
+                        No players matching "@_playerSearch"
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (_loadingStats)
+    {
+        <div class="d-flex align-items-center gap-2 text-muted mb-3">
+            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+            <span>Loading stats for @(_selectedPlayer?.FullName)...</span>
+        </div>
+    }
+
+    @if (_stats is not null && !_loadingStats)
+    {
+        <div class="card border-0 shadow-sm" style="max-width: 680px;">
+            <div class="card-header bg-primary text-white py-3">
+                <h5 class="mb-0 fw-bold">@_stats.PlayerName</h5>
+                <div class="d-flex gap-2 mt-1">
+                    <span class="badge bg-white text-primary">@_stats.Sport</span>
+                    @if (!string.IsNullOrEmpty(_stats.Team))
+                    {
+                        <span class="badge bg-white bg-opacity-25">@_stats.Team</span>
+                    }
+                    @if (_selectedPlayer?.Position is not null)
+                    {
+                        <span class="badge bg-white bg-opacity-25">@_selectedPlayer.Position</span>
+                    }
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    @foreach (var (label, value) in _stats.Stats)
+                    {
+                        <div class="col-6 col-sm-4 col-md-3">
+                            <div class="card border-0 bg-light text-center h-100">
+                                <div class="card-body py-3">
+                                    <div class="fs-4 fw-bold text-primary">@value</div>
+                                    <small class="text-muted">@label</small>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+    else if (_selectedPlayer is not null && !_loadingStats && _stats is null)
+    {
+        <div class="alert alert-warning">No stats available for this player.</div>
+    }
+</div>
+
+@code {
+    private List<Sport> _sports = [];
+    private List<Player> _players = [];
+    private PlayerStats? _stats;
+    private Player? _selectedPlayer;
+    private string _selectedSportId = string.Empty;
+    private string _playerSearch = string.Empty;
+    private bool _showDropdown;
+    private int _highlightedIndex = -1;
+    private bool _loadingPlayers;
+    private bool _loadingStats;
+
+    private List<Player> _filteredPlayers => string.IsNullOrWhiteSpace(_playerSearch)
+        ? _players
+        : _players.Where(p =>
+            p.FullName.Contains(_playerSearch, StringComparison.OrdinalIgnoreCase) ||
+            (p.Team?.Contains(_playerSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (p.Position?.Contains(_playerSearch, StringComparison.OrdinalIgnoreCase) ?? false))
+          .ToList();
+
+    protected override void OnInitialized() => _sports = SportsService.GetAvailableSports();
+
+    private string GetPlayerPlaceholder()
+    {
+        if (_loadingPlayers) return "Loading players...";
+        if (_players.Count == 0) return "Select a sport first";
+        return "Search by name, team, or position...";
+    }
+
+    private async Task OnSportChanged()
+    {
+        _players = [];
+        _stats = null;
+        _selectedPlayer = null;
+        _playerSearch = string.Empty;
+        _showDropdown = false;
+        _highlightedIndex = -1;
+
+        if (string.IsNullOrEmpty(_selectedSportId)) return;
+
+        _loadingPlayers = true;
+        StateHasChanged();
+
+        _players = await SportsService.GetPlayersAsync(_selectedSportId);
+        _loadingPlayers = false;
+        StateHasChanged();
+    }
+
+    private void OnPlayerSearchInput(ChangeEventArgs e)
+    {
+        _playerSearch = e.Value?.ToString() ?? string.Empty;
+        _selectedPlayer = null;
+        _stats = null;
+        _showDropdown = true;
+        _highlightedIndex = -1;
+    }
+
+    private void OnPlayerSearchFocus()
+    {
+        _showDropdown = _players.Count > 0;
+        _highlightedIndex = -1;
+    }
+
+    private async Task OnPlayerSearchBlur()
+    {
+        await Task.Delay(200);
+        _showDropdown = false;
+        StateHasChanged();
+    }
+
+    private void OnPlayerSearchKeyDown(KeyboardEventArgs e)
+    {
+        var count = _filteredPlayers.Count;
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                _highlightedIndex = Math.Min(_highlightedIndex + 1, count - 1);
+                _showDropdown = true;
+                break;
+            case "ArrowUp":
+                _highlightedIndex = Math.Max(_highlightedIndex - 1, 0);
+                break;
+            case "Enter":
+                if (_highlightedIndex >= 0 && _highlightedIndex < count)
+                    SelectPlayer(_filteredPlayers[_highlightedIndex]);
+                break;
+            case "Escape":
+                _showDropdown = false;
+                break;
+        }
+    }
+
+    private void SelectPlayer(Player player)
+    {
+        _selectedPlayer = player;
+        _playerSearch = player.FullName;
+        _showDropdown = false;
+        _highlightedIndex = -1;
+        _ = LoadStatsAsync(player);
+    }
+
+    private void ClearPlayer()
+    {
+        _selectedPlayer = null;
+        _playerSearch = string.Empty;
+        _stats = null;
+        _showDropdown = false;
+    }
+
+    private async Task LoadStatsAsync(Player player)
+    {
+        _stats = null;
+        _loadingStats = true;
+        StateHasChanged();
+
+        _stats = await SportsService.GetPlayerStatsAsync(_selectedSportId, player.Id, player.FullName);
+        _loadingStats = false;
+        StateHasChanged();
+    }
+}

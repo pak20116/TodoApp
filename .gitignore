@@ -1,0 +1,25 @@
+## .NET build outputs
+bin/
+obj/
+
+## SQLite database files
+*.db
+*.db-shm
+*.db-wal
+
+## User-specific files
+*.user
+*.suo
+.vs/
+
+## Rider/Resharper
+.idea/
+*.DotSettings.user
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Environment / secrets
+appsettings.*.json
+!appsettings.Development.json

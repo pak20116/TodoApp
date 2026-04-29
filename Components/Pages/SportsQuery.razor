@@ -1,0 +1,150 @@
+@page "/sports-query"
+@rendermode InteractiveServer
+@using TodoApp.Services
+@inject ISportsQueryService QueryService
+
+<PageTitle>Sports Query</PageTitle>
+
+<div class="container-fluid" style="max-width: 800px;">
+    <div class="row mb-4">
+        <div class="col">
+            <h2>Ask a Sports Question</h2>
+            <p class="text-muted mb-0">Powered by Claude AI with live sports data tools.</p>
+        </div>
+    </div>
+
+    @if (!QueryService.IsConfigured)
+    {
+        <div class="alert alert-warning">
+            <strong>API key not configured.</strong> In <code>appsettings.json</code>, set
+            <code>"Llm": {{ "Provider": "Gemini", "GeminiApiKey": "your-key-here" }}</code>.
+            Get a free Gemini key at <strong>aistudio.google.com</strong> → Get API key.
+            To use Anthropic instead, set <code>"Provider": "Anthropic"</code> and <code>"AnthropicApiKey"</code>.
+        </div>
+    }
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Your question</label>
+                <textarea class="form-control" rows="3" placeholder="e.g. Who leads the NHL in scoring this season? What are LeBron James's stats? Biggest comeback in NBA this week?"
+                          @bind="_question" @bind:event="oninput"
+                          @onkeydown="OnKeyDown"
+                          disabled="@_loading"></textarea>
+            </div>
+
+            <div class="d-flex gap-2 align-items-center">
+                <button class="btn btn-primary" @onclick="SubmitQuery"
+                        disabled="@(_loading || string.IsNullOrWhiteSpace(_question))">
+                    @if (_loading)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        <span>Thinking...</span>
+                    }
+                    else
+                    {
+                        <span>&#x1F50D; Ask</span>
+                    }
+                </button>
+                @if (_result is not null)
+                {
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="Clear">Clear</button>
+                }
+                @if (_toolsUsed?.Count > 0)
+                {
+                    <small class="text-muted ms-2">
+                        Tools used: @string.Join(", ", _toolsUsed.Select(t => t.Replace('_', ' ')))
+                    </small>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (_result is not null)
+    {
+        <div class="card border-0 @(_hasError ? "border-danger" : "bg-light") shadow-sm">
+            <div class="card-body">
+                @if (_hasError)
+                {
+                    <div class="text-danger">@_result</div>
+                }
+                else
+                {
+                    <div style="white-space: pre-wrap; line-height: 1.7;">@_result</div>
+                }
+            </div>
+        </div>
+    }
+
+    <div class="mt-4">
+        <p class="text-muted small fw-semibold mb-2">Try asking:</p>
+        <div class="d-flex flex-wrap gap-2">
+            @foreach (var suggestion in _suggestions)
+            {
+                <button class="btn btn-outline-secondary btn-sm" @onclick="() => UseSuggestion(suggestion)"
+                        disabled="@_loading">
+                    @suggestion
+                </button>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _question = string.Empty;
+    private string? _result;
+    private bool _loading;
+    private bool _hasError;
+    private IReadOnlyList<string>? _toolsUsed;
+
+    private static readonly string[] _suggestions =
+    [
+        "Who leads the NBA in scoring?",
+        "Top 3 NHL point leaders this season",
+        "Compare LeBron James and Stephen Curry stats",
+        "Best quarterback stats in the NFL",
+        "Premier League top scorers",
+        "Who is Connor McDavid?",
+        "Top MLB home run hitters",
+        "WWE current champions",
+    ];
+
+    private async Task SubmitQuery()
+    {
+        if (string.IsNullOrWhiteSpace(_question) || _loading) return;
+
+        _loading = true;
+        _result = null;
+        _hasError = false;
+        _toolsUsed = null;
+        StateHasChanged();
+
+        var queryResult = await QueryService.QueryAsync(_question.Trim());
+
+        _result = queryResult.Answer;
+        _hasError = queryResult.Error is not null && queryResult.Error != "not_configured";
+        _toolsUsed = queryResult.ToolsUsed;
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && e.CtrlKey)
+            await SubmitQuery();
+    }
+
+    private void UseSuggestion(string suggestion)
+    {
+        _question = suggestion;
+        _ = SubmitQuery();
+    }
+
+    private void Clear()
+    {
+        _question = string.Empty;
+        _result = null;
+        _hasError = false;
+        _toolsUsed = null;
+    }
+}

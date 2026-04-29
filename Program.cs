@@ -6,6 +6,7 @@ using TodoApp.Components.Account;
 using TodoApp.Data;
 using TodoApp.Hubs;
 using TodoApp.Services;
+using TodoApp.Services.Llm;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -47,6 +48,20 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
 builder.Services.AddScoped<ITodoService, TodoService>();
+builder.Services.AddHttpClient<ISportsService, SportsService>();
+builder.Services.AddHttpClient<GeminiLlmProvider>();
+builder.Services.AddHttpClient<AnthropicLlmProvider>();
+builder.Services.AddScoped<ILlmProvider>(sp =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    return (cfg["Llm:Provider"] ?? "Gemini").Trim().ToLower() switch
+    {
+        "anthropic" => (ILlmProvider)sp.GetRequiredService<AnthropicLlmProvider>(),
+        _           => sp.GetRequiredService<GeminiLlmProvider>()
+    };
+});
+builder.Services.AddScoped<ISportsQueryService, SportsQueryService>();
+builder.Services.AddMemoryCache();
 builder.Services.AddSignalR();
 
 var app = builder.Build();
